@@ -271,50 +271,86 @@ def create_indexed_graph(edges):
 
 
 if __name__ == "__main__":
+
+       
+    # # Definimos las artistas del grafo
+    # Figura 3
+    # edges = [(1,2),
+    #          (2,3),
+    #          (2,5),
+    #          (2,6),
+    #          (3,4),
+    #          (3,6),
+    #          (4,5),
+    #          (4,6),
+    #          (5,7)]
     
+    # Fig 7.a
     # Definimos las artistas del grafo
-    edges = [(1,2),
-             (2,3),
-             (2,5),
-             (2,6),
-             (3,4),
-             (3,6),
-             (4,5),
-             (4,6),
-             (5,7)]
-    
-    # Creamos el grafo indexado con las aristas anteriores
-    G, node_indices = create_indexed_graph(edges)
+    Fig_7a_edges = [(1,3),(1,8),(2,3),(2,4),(2,5),(3,7),(3,8),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,7),(6,8)]
 
-    listProximity = []
-    # Itera sobre cada par de vértices para calcular la proximidad
-    for v in G.nodes():
-        vint = int(v)
-        for w in G.nodes():
-            wint = int(w)
-            if vint < wint:  # Only consider the upper triangular part
-                pair = (f"{vint} - {wint}")
-                if pair not in [x[0] for x in listProximity]:
-                    listProximity.append((pair, calculate_proximity_measures(G, vint, wint)[1]))
-    listProximity.sort(key=lambda x: x[1], reverse=False)
-    
-    print("Proximidad entre nodos")
-    for i in listProximity:
-        print(i)
+    # Fig 7.b
+    # Definimos las artistas del grafo
+    Fig_7b_edges = [(1,4),(1,5),(1,7),(1,8),(2,3),(2,6),(2,7),(2,8),(3,4),(3,5),(3,6),(4,6),(4,7),(5,6),(5,8),(6,7),(6,8),(7,8)]
 
-    print("Communicability Cosine Centrality")
-    for i in range(len(G.nodes())):
-        print(i+1, calculate_CCC(G, i))
+    # Fig 7.c
+    # Definimos las artistas del grafo
+    Fig_7c_edges = [(1,7),(1,8),(2,3),(2,4),(2,5),(3,6),(3,7),(3,8),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,8)]
 
-    # # Calcula e imprime la CCC para cada vértice en el grafo
-    # for v in G.nodes():
-    #     ccc = calculate_CCC(G, int(v)-1)
-    #     print(f"CCC para el vértice {v}: {ccc}")
+    # Fig 7.d
+    # Definimos las artistas del grafo
+    Fig_7d_edges = [(1,7),(1,8),(2,5),(2,6),(2,7),(2,8),(3,5),(3,6),(3,7),(3,8),(4,5),(4,6),(4,7),(4,8),(5,8),(6,8),(7,8)]
+
+    # Fig 7.e
+    # Definimos las artistas del grafo
+    Fig_7e_edges = [(1,3),(1,6),(1,7),(1,8),(2,3),(2,6),(2,7),(2,8),(3,4),(3,5),(4,5),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,7),(6,8),(7,8)]
+
+    # Fig 7.f
+    # Definimos las artistas del grafo
+    Fig_7f_edges = [(1,8),(2,8),(3,8),(4,8),(5,7),(6,7),(6,8)]
+
+    # Fig 7.g
+    # Definimos las artistas del grafo
+    Fig_7g_edges = [(1,6),(2,3),(2,7),(3,8),(4,5),(4,8),(5,7),(6,7),(6,8)]
+
+    # Fig 7.h
+    # Definimos las artistas del grafo
+    Fig_7h_edges = [(1,3),(1,4),(1,5),(2,6),(2,7),(2,8),(3,5),(3,8),(4,6),(4,7),(5,6),(5,7),(6,8),(7,8)]
+
+    edges = []
+    edges.append(Fig_7a_edges)
+    edges.append(Fig_7b_edges)
+    edges.append(Fig_7c_edges)
+    edges.append(Fig_7d_edges)
+    edges.append(Fig_7e_edges)
+    edges.append(Fig_7f_edges)
+    edges.append(Fig_7g_edges)
+    edges.append(Fig_7h_edges)
 
 
-    # # Dibuja el grafo
-    # nx.draw(G, with_labels=True)
-    # plt.show()
+    # Lista para almacenar los resultados
+    results = []
+    etiq = ['a','b','c','d','e','f','g','h']
+    j = 0
+    # Iterar sobre cada grafo representado en edges
+    for graph_edges in edges:
+        # Creamos el grafo indexado con las aristas
+        G, node_indices = create_indexed_graph(graph_edges)
+
+        # Calculamos la CCC para cada vértice en el grafo
+        for i in range(len(G.nodes())):
+            results.append(("G_"+etiq[j], i+1, calculate_CCC(G, i)))
+        j += 1
+
+    # Imprimir los resultados en forma de tabla
+    current_graph = ""
+    for graph_edges, vertex, ccc in results:
+        if graph_edges != current_graph:
+            print(f"\nGraph {graph_edges}:")
+            print("Vertex\tCCC")
+            current_graph = graph_edges
+        print(f"{vertex}\t{ccc}")
+
 
     
 
