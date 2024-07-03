@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.linalg import lu, qr, expm, fractional_matrix_power
+from scipy.linalg import lu, qr, expm, fractional_matrix_power, eigsh
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 def communicability_between_vertices(G, v, w, beta=1):
     """
     Calcula la comunicabilidad entre dos nodos v y w en un grafo G.
-    Ecuación 2.1 del paper de Estrada
+    Ecuación 2.1 del paper de Communicability Cosine Distance de Ernesto Estrada
     
     Parámetros:
     - G: Un grafo de NetworkX.
@@ -31,7 +31,7 @@ def communicability_between_vertices(G, v, w, beta=1):
 def communicability_between_vertices_spectral(G, v, w, beta=1):
     """
     Calcula la comunicabilidad entre dos nodos v y w en un grafo G.
-    Ecuación 2.2 del paper de Estrada
+    Ecuación 2.2 del paper de Communicability Cosine Distance de Ernesto Estrada
     
     Parámetros:
     - G: Un grafo de NetworkX.
@@ -55,6 +55,46 @@ def communicability_between_vertices_spectral(G, v, w, beta=1):
     
     # Suma sobre todos los valores propios y sus correspondientes vectores propios
     for j in range(len(eigenvalues)):
+        lambda_j = eigenvalues[j]
+        psi_j = eigenvectors[:, j].reshape(-1, 1)
+        exp_beta_A += np.exp(beta * lambda_j) * (psi_j @ psi_j.T.conj())
+
+    # Retorna el valor real de la comunicabilidad entre los nodos v y w
+    return exp_beta_A[v, w].real
+
+
+def communicability_between_vertices_approx(G, v, w, beta=1, k=None):
+    """
+    Calcula la comunicabilidad entre dos nodos v y w en un grafo G.
+    Ecuación 6.7 del paper de Communicability Cosine Distance de Ernesto Estrada
+
+    Parámetros:
+    - G: Un grafo de NetworkX.
+    - v: El índice del primer nodo.
+    - w: El índice del segundo nodo.
+    - beta: Un parámetro empírico, establecido en 1 por defecto.
+    - k: Número de mayores valores propios y vectores propios a considerar.
+         Si es None, se utilizan todos.
+
+    Retorna:
+    - La comunicabilidad entre los nodos v y w.
+    """
+
+    # Convierte el grafo en una matriz de adyacencia
+    A = nx.to_numpy_array(G)
+
+    # Si no se especifica k, usar todos los valores propios
+    if k is None:
+        k = len(eigenvalues)
+
+    # Calcula los valores y vectores propios de A
+    eigenvalues, eigenvectors = eigsh(A, k=k, which='LM')
+
+    # Inicializa la matriz exponencial como una matriz de ceros del mismo tamaño que A
+    exp_beta_A = np.zeros_like(A, dtype=np.complexfloating)
+
+    # Suma sobre los k mayores valores propios y sus correspondientes vectores propios
+    for j in range(k):
         lambda_j = eigenvalues[j]
         psi_j = eigenvectors[:, j].reshape(-1, 1)
         exp_beta_A += np.exp(beta * lambda_j) * (psi_j @ psi_j.T.conj())
