@@ -1,7 +1,15 @@
 import numpy as np
-from scipy.linalg import lu, qr, expm, fractional_matrix_power, eigsh
+from scipy.linalg import lu, qr, expm, fractional_matrix_power
+from scipy.sparse.linalg import eigsh
 import networkx as nx
 import matplotlib.pyplot as plt
+from networkx.algorithms.isomorphism import GraphMatcher
+
+# Para importar la función communicability_exp
+from networkx.algorithms.communicability_alg import communicability_exp
+
+# Para importar la función communicability_betweenness_centrality
+from networkx.algorithms.centrality.subgraph_alg import communicability_betweenness_centrality
 
 
 def communicability_between_vertices(G, v, w, beta=1):
@@ -308,6 +316,72 @@ def create_indexed_graph(edges):
     G.add_edges_from(indexed_edges)
     
     return G, node_indices
+
+
+
+def compute_laplacian_pseudoinverse(L):
+    L_pseudo_inv = np.linalg.pinv(L)
+    return L_pseudo_inv
+
+def calculate_effective_resistance(L_pseudo_inv):
+    n = L_pseudo_inv.shape[0]
+    R = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i+1, n):
+            R[i, j] = R[j, i] = L_pseudo_inv[i, i] + L_pseudo_inv[j, j] - 2 * L_pseudo_inv[i, j]
+    return R
+
+def calculate_rcc(G):
+    L = nx.laplacian_matrix(G).toarray()
+    L_pseudo_inv = compute_laplacian_pseudoinverse(L)
+    R = calculate_effective_resistance(L_pseudo_inv)    
+    rcc = {}
+    for node in G.nodes():
+        rcc[node] = 1 / np.sum(R[node])   
+    return rcc
+
+
+def find_hypersphere_center(X_T):
+    m, n = X_T.shape
+    A = np.hstack((2 * (X_T - X_T[0]), np.ones((m, 1))))
+    b = np.sum(X_T**2, axis=1) - np.sum(X_T[0]**2)
+    pseudo_inv = np.linalg.pinv(A)
+    solution = pseudo_inv @ b
+    c = solution[:n]
+    return c
+
+def check_points_on_hypersphere(X_T):
+    center = find_hypersphere_center(X_T)   
+    distances = np.linalg.norm(X_T - center, axis=1)   
+    if np.allclose(distances, distances[0]):
+        print("All vectors lie on the same hypersphere.")
+        return True
+    else:
+        print("The vectors do not lie on the same hypersphere.")
+        return False
+    
+
+def remove_vertex(graph, vertex):
+    new_graph = graph.copy()
+    new_graph.remove_node(vertex)
+    return new_graph
+
+def check_vertex_removal_isomorphism(graph, v, w):
+    G_v = remove_vertex(graph, v)
+    G_w = remove_vertex(graph, w)    
+    return nx.is_isomorphic(G_v, G_w)
+
+
+def find_automorphisms(graph):
+    matcher = GraphMatcher(graph, graph)
+    return list(matcher.isomorphisms_iter())
+
+def check_swap_in_automorphisms(automorphisms, v1, v2):
+    swapping_automorphisms = []
+    for aut in automorphisms:
+        if aut[v1] == v2 and aut[v2] == v1:
+            swapping_automorphisms.append(aut)
+    return swapping_automorphisms
 
 
 if __name__ == "__main__":
