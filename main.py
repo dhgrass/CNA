@@ -233,6 +233,7 @@ def calculate_CCD(G, v, w):
     
     return Dvw
 
+
 def calculate_CCD_matrix(G):
     """
     Calcula la matriz CCD para un grafo G.
@@ -256,6 +257,7 @@ def calculate_CCD_matrix(G):
             D[w, v] = D_vw  # Asegura la simetría
     
     return D
+
 
 def calculate_CCC(G, v):
     """
@@ -284,6 +286,18 @@ def calculate_CCC(G, v):
     Cv = 1 / sum_Dvw
     
     return Cv
+
+def proximity(G, ):
+    D = calculate_CCD_matrix(G)
+    max_value = np.max(D)
+    # D = D / max_value
+    n = len(G.nodes())
+    for v in range(n):
+        for w in range(v, n):
+            D_vw = (calculate_CCC(G, v) + 1.5*D[v, w] + calculate_CCC(G, w)) / 3.5
+            D[v, w] = D_vw
+            D[w, v] = D_vw
+    return D
 
 
 def create_indexed_graph(edges):
