@@ -11,6 +11,8 @@ from networkx.algorithms.communicability_alg import communicability_exp
 # Para importar la función communicability_betweenness_centrality
 from networkx.algorithms.centrality.subgraph_alg import communicability_betweenness_centrality
 
+import pandas as pd
+
 
 def communicability_between_vertices(G, v, w, beta=1):
     """
@@ -259,7 +261,7 @@ def calculate_CCD_matrix(G):
     return D
 
 
-def calculate_CCC(G, v):
+def calculate_CCC(G, v, D=None):
     """
     Calcula la centralidad de cercanía basada en la distancia del coseno (CCC) para el vértice v en el grafo G.
     
@@ -271,8 +273,8 @@ def calculate_CCC(G, v):
     - Cv: La CCC del vértice v.
     """
     # Calcula la matriz CCD para el grafo G
-    D = calculate_CCD_matrix(G)
-    # print(D)
+    if D is None:
+        D = calculate_CCD_matrix(G)
     
     # Obtiene el número de nodos en el grafo
     n = len(G.nodes())
@@ -283,7 +285,7 @@ def calculate_CCC(G, v):
         sum_Dvw += D[v, w]
     
     # Calcula la CCC para el vértice v
-    Cv = 1 / sum_Dvw
+    Cv = round(1 / sum_Dvw, 7)
     
     return Cv
 
@@ -397,84 +399,295 @@ def check_swap_in_automorphisms(automorphisms, v1, v2):
             swapping_automorphisms.append(aut)
     return swapping_automorphisms
 
+def find_closest_vertices(matrix):
+    n = len(matrix)
+    closest_vertices = []
+    for i in range(n):
+        closest_vertex = min(range(n), key=lambda j: matrix[i][j] if j != i else float('inf'))
+        if [i+1, closest_vertex+1] not in closest_vertices or [closest_vertex+1, i+1] not in closest_vertices:
+            closest_vertices.append([i+1, closest_vertex+1])
+
+    filtered_closest_vertices = []
+    for pair in closest_vertices:
+        if (pair[0], pair[1]) not in [(x[1], x[0]) for x in filtered_closest_vertices]:
+            filtered_closest_vertices.append(pair)
+    return filtered_closest_vertices
+
+import networkx as nx
+
+def merge_nodes(G, a, b, new_node):
+    """
+    Fusiona los nodos a y b en un nuevo nodo c, y repondera las aristas según el procedimiento descrito.
+    
+    Parámetros:
+        G: Grafo ponderado dirigido (networkx.DiGraph)
+        a: Nodo a ser fusionado.
+        b: Nodo a ser fusionado.
+        new_node: Nombre del nuevo nodo que resultará de la fusión de a y b.
+    
+    Retorna:
+        H: Un nuevo grafo con los nodos fusionados y las aristas reponderadas.
+    """
+    # Copiamos el grafo para no modificar el original
+    H = G.copy()
+
+    # Obtén el peso de la arista entre a y b (y viceversa si existe)
+    Beta1 = G[a][b]['weight'] if G.has_edge(a, b) else 0
+    Beta2 = G[b][a]['weight'] if G.has_edge(b, a) else 0
+
+    # Crear el nuevo nodo y añadirlo al grafo
+    H.add_node(new_node)
+
+    # Reponderar las aristas entrantes al nuevo nodo
+    for t in set(H.predecessors(a)).union(H.predecessors(b)):
+        if t != a and t != b:
+            ai_t = G[t][a]['weight'] if G.has_edge(t, a) else 0
+            bi_t = G[t][b]['weight'] if G.has_edge(t, b) else 0
+            
+            if t in G.predecessors(a) and t not in G.predecessors(b):
+                new_weight = (1 + Beta1) * ai_t / 2
+            elif t in G.predecessors(b) and t not in G.predecessors(a):
+                new_weight = (1 + Beta2) * bi_t / 2
+            else:  # t está en Nbi(a) ∩ Nbi(b)
+                new_weight = ((1 + Beta1) * ai_t + (1 + Beta2) * bi_t) / 4
+
+            H.add_edge(t, new_node, weight=new_weight)
+    
+    # Reponderar las aristas salientes del nuevo nodo
+    for t in set(H.successors(a)).union(H.successors(b)):
+        if t != a and t != b:
+            ao_t = G[a][t]['weight'] if G.has_edge(a, t) else 0
+            bo_t = G[b][t]['weight'] if G.has_edge(b, t) else 0
+            
+            if t in G.successors(a) and t not in G.successors(b):
+                new_weight = (1 + Beta2) * ao_t / 2
+            elif t in G.successors(b) and t not in G.successors(a):
+                new_weight = (1 + Beta1) * bo_t / 2
+            else:  # t está en Nbo(a) ∩ Nbo(b)
+                new_weight = ((1 + Beta2) * ao_t + (1 + Beta1) * bo_t) / 4
+
+            H.add_edge(new_node, t, weight=new_weight)
+    
+    # Eliminar los nodos originales a y b
+    H.remove_node(a)
+    H.remove_node(b)
+
+    return H
+
+
+def merge_nodes_undirected(G, a, b, new_node):
+    """
+    Fusiona los nodos a y b en un nuevo nodo c en un grafo no dirigido y no ponderado.
+    
+    Parámetros:
+        G: Grafo no dirigido (networkx.Graph)
+        a: Nodo a ser fusionado.
+        b: Nodo a ser fusionado.
+        new_node: Nombre del nuevo nodo que resultará de la fusión de a y b.
+    
+    Retorna:
+        H: Un nuevo grafo con los nodos fusionados.
+    """
+    # Copiamos el grafo para no modificar el original
+    H = G.copy()
+
+    # Crear el nuevo nodo y añadirlo al grafo
+    H.add_node(new_node)
+
+    # Fusionar las aristas de a y b en el nuevo nodo c
+    neighbors_a = set(H.neighbors(a))
+    neighbors_b = set(H.neighbors(b))
+
+    # Agregar conexiones desde el nuevo nodo a los vecinos de a o b
+    for t in neighbors_a.union(neighbors_b):
+        if t != a and t != b:
+            H.add_edge(new_node, t)
+    
+    # Eliminar los nodos originales a y b
+    H.remove_node(a)
+    H.remove_node(b)
+
+    return H
+
+def plot_graph(G, title="Grafo"):
+    """
+    Función para graficar un grafo.
+
+    Parámetros:
+    - G: Un grafo de NetworkX.
+    - title: Título del gráfico.
+    """
+    plt.figure(figsize=(10, 8))
+    pos = nx.spring_layout(G)  # Posiciones de los nodos
+    nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color='gray', node_size=2000, font_size=15, font_color='black')
+    plt.title(title)
+    plt.show()
+
 
 if __name__ == "__main__":
 
-       
-    # # Definimos las artistas del grafo
-    # Figura 3
-    # edges = [(1,2),
-    #          (2,3),
-    #          (2,5),
-    #          (2,6),
-    #          (3,4),
-    #          (3,6),
-    #          (4,5),
-    #          (4,6),
-    #          (5,7)]
+    # # Ejemplo de uso Grafo no dirigido y no ponderado
+    # G = nx.Graph()
+
+    # Cargar el grafo del club de karate de Zachary
+    G = nx.karate_club_graph()
+    print("Nodos del grafo original:", G.nodes())
+
+    # Graficar el grafo original
+    plot_graph(G, title="Grafo Original del Club de Karate de Zachary")
+
+    # # Añadir nodos y aristas al grafo
+    # G.add_edge('a', 'b')
+    # G.add_edge('a', 'c')
+    # G.add_edge('b', 'd')
+    # G.add_edge('c', 'd')
+    # G.add_edge('b', 'e')
+
+    # Fusionar nodos 'a' y 'b' en el nuevo nodo 'c'
+    H = merge_nodes_undirected(G, 5, 6, 56)
+
+    # # Mostrar el grafo resultante
+    # print("Nodos del grafo resultante:", H.nodes())
+    # print("Aristas del grafo resultante:", H.edges())
+
+    # Graficar el grafo resultante
+    plot_graph(H, title="Grafo Resultante Después de Fusionar Nodos")
+
+
+    # # Ejemplo de uso grafo dirigido y ponderado
+    # G = nx.DiGraph()
+
+    # # Añadir nodos y aristas al grafo
+    # G.add_edge('a', 'b', weight=0.5)
+    # G.add_edge('a', 'c', weight=0.5)
+    # G.add_edge('b', 'd', weight=0.5)
+    # G.add_edge('c', 'd', weight=0.5)
+    # G.add_edge('b', 'a', weight=0.25)  # Arista inversa de b a a
+
+    # # Fusionar nodos 'a' y 'b' en el nuevo nodo 'c'
+    # H = merge_nodes(G, 'a', 'b', 'c')
+
+    # # Mostrar el grafo resultante
+    # print("Nodos del grafo resultante:", H.nodes())
+    # print("Aristas del grafo resultante con pesos:", H.edges(data=True))
+
+
+
+     
+
+
+
+    # # Cargar el grafo del club de karate de Zachary
+    # G = nx.karate_club_graph()
+
+    # # Calcular la matriz CCD
+    # D = calculate_CCD_matrix(G)
     
-    # Fig 7.a
-    # Definimos las artistas del grafo
-    Fig_7a_edges = [(1,3),(1,8),(2,3),(2,4),(2,5),(3,7),(3,8),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,7),(6,8)]
+    # closest_vertices = find_closest_vertices(D)
+    # print(closest_vertices)
 
-    # Fig 7.b
-    # Definimos las artistas del grafo
-    Fig_7b_edges = [(1,4),(1,5),(1,7),(1,8),(2,3),(2,6),(2,7),(2,8),(3,4),(3,5),(3,6),(4,6),(4,7),(5,6),(5,8),(6,7),(6,8),(7,8)]
+    # # Mostrar la matriz CCD de manera más legible
+    # df = pd.DataFrame(D, index=G.nodes(), columns=G.nodes())
+    # # print("Matriz CCD:")
+    # # print(df)
+    
+    # # Guardar la matriz CCD en un archivo XLS
+    # df.to_excel('/home/darian/ComplexNetAnalysis/matriz_ccd.xlsx', index=True)
 
-    # Fig 7.c
-    # Definimos las artistas del grafo
-    Fig_7c_edges = [(1,7),(1,8),(2,3),(2,4),(2,5),(3,6),(3,7),(3,8),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,8)]
-
-    # Fig 7.d
-    # Definimos las artistas del grafo
-    Fig_7d_edges = [(1,7),(1,8),(2,5),(2,6),(2,7),(2,8),(3,5),(3,6),(3,7),(3,8),(4,5),(4,6),(4,7),(4,8),(5,8),(6,8)]
-
-    # Fig 7.e
-    # Definimos las artistas del grafo
-    Fig_7e_edges = [(1,3),(1,6),(1,7),(1,8),(2,3),(2,6),(2,7),(2,8),(3,4),(3,5),(4,5),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,7),(6,8),(7,8)]
-
-    # Fig 7.f
-    # Definimos las artistas del grafo
-    Fig_7f_edges = [(1,8),(2,8),(3,8),(4,8),(5,7),(6,7),(6,8)]
-
-    # Fig 7.g
-    # Definimos las artistas del grafo
-    Fig_7g_edges = [(1,6),(2,3),(2,7),(3,8),(4,5),(4,8),(5,7),(6,7),(6,8)]
-
-    # Fig 7.h
-    # Definimos las artistas del grafo
-    Fig_7h_edges = [(1,3),(1,4),(1,5),(2,6),(2,7),(2,8),(3,4),(3,5),(3,8),(4,6),(4,7),(5,6),(5,7),(6,8),(7,8)]
-
-    edges = []
-    edges.append(Fig_7a_edges)
-    edges.append(Fig_7b_edges)
-    edges.append(Fig_7c_edges)
-    edges.append(Fig_7d_edges)
-    edges.append(Fig_7e_edges)
-    edges.append(Fig_7f_edges)
-    edges.append(Fig_7g_edges)
-    edges.append(Fig_7h_edges)
+    # # Calcular y mostrar el CCC para cada nodo del grafo
+    # print("\nCCC para cada nodo:")
+    # results = []
+    # for node in G.nodes():
+    #     ccc = calculate_CCC(G, node, D=D)
+    #     results.append((node, ccc))
+    #     print(f"Nodo {node+1}: CCC = {ccc}")
+    
+    # # Ordenar los resultados por el índice CCC en orden descendente
+    # results.sort(key=lambda x: x[1], reverse=True)
+    # print("\nCCC ordenado por valor:")
+    # for node, ccc in results:
+    #     print(f"Nodo {node+1}: CCC = {ccc}")
 
 
-    # Lista para almacenar los resultados
-    results = []
-    etiq = ['a','b','c','d','e','f','g','h']
-    j = 0
-    # Iterar sobre cada grafo representado en edges
-    for graph_edges in edges:
-        # Creamos el grafo indexado con las aristas
-        G, node_indices = create_indexed_graph(graph_edges)
+    # # Fig 7.a
+    # # Definimos las artistas del grafo
+    # Fig_7a_edges = [(1,3),(1,8),(2,3),(2,4),(2,5),(3,7),(3,8),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,7),(6,8)]
 
-        # Calculamos la CCC para cada vértice en el grafo
-        for i in range(len(G.nodes())):
-            results.append(("G_"+etiq[j], i+1, calculate_CCC(G, i)))
-        j += 1
+    # # Fig 7.b
+    # # Definimos las artistas del grafo
+    # Fig_7b_edges = [(1,4),(1,5),(1,7),(1,8),(2,3),(2,6),(2,7),(2,8),(3,4),(3,5),(3,6),(4,6),(4,7),(5,6),(5,8),(6,7),(6,8),(7,8)]
 
-    # Imprimir los resultados en forma de tabla
-    current_graph = ""
-    for graph_edges, vertex, ccc in results:
-        if graph_edges != current_graph:
-            print(f"\nGraph {graph_edges}:")
-            print("Vertex\tCCC")
-            current_graph = graph_edges
-        print(f"{vertex}\t{ccc}")
+    # # Fig 7.c
+    # # Definimos las artistas del grafo
+    # Fig_7c_edges = [(1,7),(1,8),(2,3),(2,4),(2,5),(3,6),(3,7),(3,8),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,8)]
+
+    # # Fig 7.d
+    # # Definimos las artistas del grafo
+    # Fig_7d_edges = [(1,7),(1,8),(2,5),(2,6),(2,7),(2,8),(3,5),(3,6),(3,7),(3,8),(4,5),(4,6),(4,7),(4,8),(5,8),(6,8)]
+
+    # # Fig 7.e
+    # # Definimos las artistas del grafo
+    # Fig_7e_edges = [(1,3),(1,6),(1,7),(1,8),(2,3),(2,6),(2,7),(2,8),(3,4),(3,5),(4,5),(4,6),(4,7),(4,8),(5,6),(5,7),(5,8),(6,7),(6,8),(7,8)]
+
+    # # Fig 7.f
+    # # Definimos las artistas del grafo
+    # Fig_7f_edges = [(1,8),(2,8),(3,8),(4,8),(5,7),(6,7),(6,8)]
+
+    # # Fig 7.g
+    # # Definimos las artistas del grafo
+    # Fig_7g_edges = [(1,6),(2,3),(2,7),(3,8),(4,5),(4,8),(5,7),(6,7),(6,8)]
+
+    # # Fig 7.h
+    # # Definimos las artistas del grafo
+    # Fig_7h_edges = [(1,3),(1,4),(1,5),(2,6),(2,7),(2,8),(3,4),(3,5),(3,8),(4,6),(4,7),(5,6),(5,7),(6,8),(7,8)]
+
+    # edges = []
+    # edges.append(Fig_7a_edges)
+    # edges.append(Fig_7b_edges)
+    # edges.append(Fig_7c_edges)
+    # edges.append(Fig_7d_edges)
+    # edges.append(Fig_7e_edges)
+    # edges.append(Fig_7f_edges)
+    # edges.append(Fig_7g_edges)
+    # edges.append(Fig_7h_edges)
+
+
+    # # Lista para almacenar los resultados
+    # results = []
+    # df_list = []
+    # etiq = ['a','b','c','d','e','f','g','h']
+    # j = 0
+    # # Iterar sobre cada grafo representado en edges
+    # for graph_edges in edges:
+    #     # Creamos el grafo indexado con las aristas
+    #     G, node_indices = create_indexed_graph(graph_edges)
+
+    #     # Calculamos la CCC para cada vértice en el grafo
+    #     for i in range(len(G.nodes())):
+    #         results.append(("G_"+etiq[j], i+1, calculate_CCC(G, i)))
+        
+
+    #     # Calcular la matriz CCD
+    #     D = calculate_CCD_matrix(G)
+
+    #     # Mostrar la matriz CCD de manera más legible
+    #     df = pd.DataFrame(D, index=G.nodes(), columns=G.nodes())
+        
+    #     # Guardar el DataFrame en una lista
+    #     df_list.append(df)
+    #     j += 1
+
+    # # Imprimir los resultados en forma de tabla
+    # current_graph = ""
+    # matrix_i = 0
+    # for graph_edges, vertex, ccc in results:
+    #     if graph_edges != current_graph:
+    #         print(f"\nGraph {graph_edges}:")
+    #         print(f"Matriz CCD para {graph_edges}:")
+    #         print(df_list[matrix_i])
+    #         matrix_i += 1
+    #         print("Vertex\tCCC")
+    #         current_graph = graph_edges
+    #     print(f"{vertex}\t{ccc}")
+    
+    # print("\n")
